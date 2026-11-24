@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Cadastro de Produto</title>
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header>
+  <strong>Cadastro de Produto</strong>
+  <div class="dir">Usuário: <span id="usuario"></span>
+    <a class="btn sec" href="principal.html">Voltar ao menu</a>
+    <button class="sec" onclick="sair()">Sair</button></div>
+</header>
+<main>
+  <div class="card">
+    <h2 id="tituloForm">Novo produto</h2>
+    <div id="erro" class="msg-erro"></div>
+    <div id="ok" class="msg-ok"></div>
+    <input type="hidden" id="id">
+    <div class="grid">
+      <div><label>Código *</label><input id="codigo"></div>
+      <div><label>Nome *</label><input id="nome"></div>
+      <div><label>Categoria *</label><select id="id_categoria"></select></div>
+      <div><label>Material</label><input id="material" placeholder="papelão, PET..."></div>
+      <div><label>Gramatura (g/m²)</label><input id="gramatura" type="number"></div>
+      <div><label>Dimensões</label><input id="dimensoes" placeholder="30x20x15 cm"></div>
+      <div><label>Capacidade (ml)</label><input id="capacidade_ml" type="number"></div>
+      <div><label>Tipo de tampa</label><input id="tipo_tampa"></div>
+      <div><label>Peso (g)</label><input id="peso_g" type="number" step="0.01"></div>
+      <div id="boxAtual"><label>Estoque inicial *</label><input id="estoque_atual" type="number" value="0"></div>
+      <div><label>Estoque mínimo *</label><input id="estoque_minimo" type="number" value="0"></div>
+    </div>
+    <br>
+    <button onclick="salvar()">Salvar</button>
+    <button class="sec" onclick="limpar()">Limpar / Cancelar edição</button>
+  </div>
+
+  <div class="card">
+    <h2>Produtos cadastrados</h2>
+    <div class="linha" style="margin-bottom:12px">
+      <input id="busca" placeholder="Buscar por nome, código, categoria ou material">
+      <button onclick="carregar()">Buscar</button>
+    </div>
+    <table>
+      <thead><tr><th>Código</th><th>Nome</th><th>Categoria</th><th>Estoque</th><th>Mínimo</th><th>Ações</th></tr></thead>
+      <tbody id="tabela"></tbody>
+    </table>
+  </div>
+</main>
+<script src="app.js"></script>
+<script>
+const CAMPOS = ['codigo','nome','id_categoria','material','gramatura','dimensoes','capacidade_ml','tipo_tampa','peso_g','estoque_atual','estoque_minimo'];
+let lista = [];
+
+async function iniciar() {
+  await mostrarUsuario();
+  const cats = await api('/api/categorias');
+  document.getElementById('id_categoria').innerHTML =
+    '<option value="">Selecione...</option>' + cats.map(c => `<option value="${c.id_categoria}">${c.nome}</option>`).join('');
+  carregar();   // carrega a tabela automaticamente (6.1.1)
+}
+
+async function carregar() {
+  const b = encodeURIComponent(document.getElementById('busca').value);
+  lista = await api('/api/produtos?busca=' + b);
+  document.getElementById('tabela').innerHTML = lista.map(p => `
+    <tr class="${p.estoque_atual < p.estoque_minimo ? 'baixo' : ''}">
+      <td>${p.codigo}</td><td>${p.nome}</td><td>${p.categoria}</td>
+      <td>${p.estoque_atual}</td><td>${p.estoque_minimo}</td>
+      <td><button class="peq" onclick="editar(${p.id_produto})">Editar</button>
+          <button class="peq perigo" onclick="excluir(${p.id_produto})">Excluir</button></td>
+    </tr>`).join('') || '<tr><td colspan="6">Nenhum produto encontrado.</td></tr>';
+}
+document.getElementById('busca').addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
+
+function limpar() {
+  CAMPOS.forEach(c => (document.getElementById(c).value = ''));
+  document.getElementById('estoque_atual').value = 0;
+  document.getElementById('estoque_minimo').value = 0;
+  document.getElementById('id').value = '';
+  document.getElementById('tituloForm').textContent = 'Novo produto';
+  document.getElementById('boxAtual').style.display = 'block';
+}
+
+function editar(id) {
+  const p = lista.find(x => x.id_produto === id);
+  CAMPOS.forEach(c => (document.getElementById(c).value = p[c] ?? ''));
+  document.getElementById('id').value = id;
+  document.getElementById('tituloForm').textContent = 'Editando produto #' + id;
+  document.getElementById('boxAtual').style.display = 'none';   // estoque só muda por movimentação
+  window.scrollTo(0, 0);
+}
+
+async function salvar() {
+  // Validação no navegador (6.1.6) - o servidor valida de novo
+  const dados = {};
+  CAMPOS.forEach(c => (dados[c] = document.getElementById(c).value.trim()));
+  if (!dados.codigo) return mostrarMsg('erro', 'Informe o código do produto.');
+  if (!dados.nome) return mostrarMsg('erro', 'Informe o nome do produto.');
+  if (!dados.id_categoria) return mostrarMsg('erro', 'Escolha uma categoria.');
+  if (dados.estoque_minimo === '' || Number(dados.estoque_minimo) < 0) return mostrarMsg('erro', 'Estoque mínimo inválido.');
+  const id = document.getElementById('id').value;
+  try {
+    if (id) await api('/api/produtos/' + id, 'PUT', dados);
+    else await api('/api/produtos', 'POST', dados);
+    mostrarMsg('ok', id ? 'Produto atualizado!' : 'Produto cadastrado!');
+    limpar(); carregar();
+  } catch (e) { mostrarMsg('erro', e.message); }
+}
+
+async function excluir(id) {
+  if (!confirm('Excluir este produto?')) return;
+  try { await api('/api/produtos/' + id, 'DELETE'); mostrarMsg('ok', 'Produto excluído.'); carregar(); }
+  catch (e) { mostrarMsg('erro', e.message); }
+}
+iniciar();
+</script>
+</body></html>

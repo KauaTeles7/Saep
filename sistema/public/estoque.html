@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Gestão de Estoque</title>
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header>
+  <strong>Gestão de Estoque</strong>
+  <div class="dir">Usuário: <span id="usuario"></span>
+    <a class="btn sec" href="principal.html">Voltar ao menu</a>
+    <button class="sec" onclick="sair()">Sair</button></div>
+</header>
+<main>
+  <div id="banner" class="alerta-banner"></div>
+
+  <div class="card">
+    <h2>Registrar movimentação</h2>
+    <div id="erro" class="msg-erro"></div>
+    <div id="ok" class="msg-ok"></div>
+    <div class="grid">
+      <div><label>Produto *</label><select id="produto"></select></div>
+      <div><label>Tipo *</label>
+        <select id="tipo"><option value="">Selecione...</option><option value="ENTRADA">Entrada</option><option value="SAIDA">Saída</option></select></div>
+      <div><label>Quantidade *</label><input id="quantidade" type="number" min="1"></div>
+      <div><label>Data *</label><input id="data" type="date"></div>
+      <div><label>Observação</label><input id="observacao"></div>
+    </div>
+    <br><button onclick="movimentar()">Registrar</button>
+  </div>
+
+  <div class="card">
+    <h2>Produtos (ordem alfabética)</h2>
+    <table>
+      <thead><tr><th>Produto</th><th>Código</th><th>Estoque atual</th><th>Mínimo</th><th></th></tr></thead>
+      <tbody id="tabela"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Histórico de movimentações</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd</th><th>Responsável</th><th>Obs.</th></tr></thead>
+      <tbody id="historico"></tbody>
+    </table>
+  </div>
+</main>
+<script src="app.js"></script>
+<script>
+// Algoritmo de ordenação (7.1.1): INSERTION SORT feito à mão, por nome
+function insertionSort(v) {
+  for (let i = 1; i < v.length; i++) {
+    const atual = v[i];
+    let j = i - 1;
+    while (j >= 0 && v[j].nome.localeCompare(atual.nome, 'pt-BR') > 0) {
+      v[j + 1] = v[j];   // empurra o maior para a direita
+      j--;
+    }
+    v[j + 1] = atual;    // coloca na posição certa
+  }
+  return v;
+}
+
+async function carregar() {
+  const produtos = insertionSort(await api('/api/produtos'));
+  document.getElementById('tabela').innerHTML = produtos.map(p => `
+    <tr class="${p.estoque_atual < p.estoque_minimo ? 'baixo' : ''}">
+      <td>${p.nome}</td><td>${p.codigo}</td><td>${p.estoque_atual}</td><td>${p.estoque_minimo}</td>
+      <td><button class="peq" onclick="escolher(${p.id_produto})">Selecionar</button></td>
+    </tr>`).join('');
+  const sel = document.getElementById('produto');
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    produtos.map(p => `<option value="${p.id_produto}">${p.nome} (estoque: ${p.estoque_atual})</option>`).join('');
+  sel.value = atual;
+  // Banner com todos os produtos abaixo do mínimo
+  const baixos = produtos.filter(p => p.estoque_atual < p.estoque_minimo);
+  const b = document.getElementById('banner');
+  b.style.display = baixos.length ? 'block' : 'none';
+  b.innerHTML = '<strong>Estoque abaixo do mínimo:</strong> ' + baixos.map(p => `${p.nome} (${p.estoque_atual}/${p.estoque_minimo})`).join(', ');
+
+  const h = await api('/api/movimentacoes');
+  document.getElementById('historico').innerHTML = h.map(m => `
+    <tr><td>${m.data_movimentacao.split('-').reverse().join('/')}</td><td>${m.produto}</td>
+    <td>${m.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</td><td>${m.quantidade}</td><td>${m.responsavel}</td><td>${m.observacao || ''}</td></tr>`).join('');
+}
+
+function escolher(id) { document.getElementById('produto').value = id; document.getElementById('tipo').focus(); }
+
+async function movimentar() {
+  const dados = {
+    id_produto: Number(document.getElementById('produto').value),
+    tipo: document.getElementById('tipo').value,
+    quantidade: document.getElementById('quantidade').value,
+    data: document.getElementById('data').value,
+    observacao: document.getElementById('observacao').value.trim()
+  };
+  if (!dados.id_produto) return mostrarMsg('erro', 'Selecione um produto.');
+  if (!dados.tipo) return mostrarMsg('erro', 'Escolha entrada ou saída.');
+  if (!dados.quantidade || Number(dados.quantidade) <= 0) return mostrarMsg('erro', 'Informe uma quantidade maior que 0.');
+  if (!dados.data) return mostrarMsg('erro', 'Informe a data.');
+  try {
+    const r = await api('/api/movimentacoes', 'POST', dados);
+    if (r.alerta) alert(r.mensagem);          // ALERTA de estoque mínimo (7.1.4)
+    else mostrarMsg('ok', r.mensagem);
+    document.getElementById('quantidade').value = '';
+    document.getElementById('observacao').value = '';
+    carregar();
+  } catch (e) { mostrarMsg('erro', e.message); }
+}
+
+document.getElementById('data').value = hoje();
+mostrarUsuario(); carregar();
+</script>
+</body></html>

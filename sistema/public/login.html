@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Login - Almoxarifado</title>
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="card login-box">
+  <h1>Almoxarifado</h1>
+  <p>Entre com seu usuário.</p>
+  <div id="erro" class="msg-erro"></div>
+  <label>E-mail</label><input id="email" type="text" autofocus>
+  <label>Senha</label><input id="senha" type="password">
+  <br><button id="entrar" style="width:100%">Entrar</button>
+</div>
+<script>
+async function entrar() {
+  const email = document.getElementById('email').value;
+  const senha = document.getElementById('senha').value;
+  const r = await fetch('/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, senha })
+  });
+  const d = await r.json();
+  if (r.ok) { location.href = 'principal.html'; return; }
+  // Falha: mostra o MOTIVO e depois volta para a tela de login (requisito 4.1)
+  const el = document.getElementById('erro');
+  el.textContent = d.erro + ' Redirecionando...'; el.style.display = 'block';
+  setTimeout(() => (location.href = 'login.html'), 2500);
+}
+document.getElementById('entrar').onclick = entrar;
+document.getElementById('senha').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+</script>
+</body></html>
